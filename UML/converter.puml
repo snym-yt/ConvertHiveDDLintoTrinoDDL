@@ -1,0 +1,60 @@
+@startuml name
+start
+    :read input file(.hql);
+    if (first column is "CREATE") then (True)
+        if (LIKE) then (True)
+            :table_name = '(\w{6}) (\w{5}) (\S+)';
+        else (False)
+            :table_name = columns[1][0];
+        endif
+
+        while (column in columns)
+            if (TABLEPROPERTIES) then (True)
+                :convert;
+                :trino_ddl +=;
+            elseif (CLUSTERED) then (True)
+                :convert;
+                :trino_ddl +=;
+            elseif (SORTED) then (True)
+                :convert;
+                :trino_ddl +=;
+            elseif (INTO) then (True)
+                :convert;
+                :trino_ddl +=;
+            elseif ((xxx)) then (True)
+                :convert;
+                :trino_ddl +=;
+            elseif (PARTITIONED) then (True)
+                :convert;
+                :trino_ddl +=;
+            elseif (LIKE) then (True)
+                :convert;
+                :trino_ddl +=;
+            elseif (TABLE) then (True)
+                :convert;
+                :trino_ddl +=;
+            endif
+        endwhile
+
+    elseif (SHOW TABLES) then (True)
+        :Convert;
+        :trino_ddl +=;
+
+    elseif (SHOW PARTITIONS) then (True)
+        :Convert;
+        :trino_ddl +=;
+
+    elseif (DESCRIBE) then (True)
+        :Convert;
+        :trino_ddl +=;
+
+    elseif (len(columns) == 1) then (True)
+        :Convert;
+        :trino_ddl +=;
+
+    endif
+
+    :write output file(.sql);
+
+end
+@enduml
