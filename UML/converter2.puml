@@ -1,0 +1,85 @@
+@startuml name
+start
+    :read input file(.hql);
+    :定型に整形;
+    if (CREATE TABLE句がある) then (True)
+
+        :trino_ddl += CREATE TABLE tablename();
+        if ("CREATE TABLE"の後に空白文字のみ挟んで"("がある) then (True)
+            :columsに()の中身を格納;
+
+            while (column in columns)
+
+                if (typeが指定範囲内) then (True)
+                    :trino_ddl += column type; 
+                else (False)
+                    :Error出力;
+                    end
+                endif  
+
+            endwhile
+
+        else (False)
+            :trino_ddl += LIKE tablename;
+        endif
+
+        :propertiesに()以降を格納;
+
+        if (propertiesが空) then (True)
+            :trino_ddl += ;;
+
+        else (False)
+
+            :trino_ddl += with();;
+
+            while (property in properties)
+
+                if (TABLEPROPERTIES) then (True)
+                    :convert;
+                    :trino_ddl +=;
+                elseif (CLUSTERED) then (True)
+                    :convert;
+                    :trino_ddl +=;
+                elseif (SORTED) then (True)
+                    :convert;
+                    :trino_ddl +=;
+                elseif (PARTITIONED) then (True)
+                    :convert;
+                    :trino_ddl +=;
+                else (False)
+                    :Error出力;
+                    end
+                endif
+
+            endwhile
+        endif
+
+
+
+    elseif (SHOW TABLES) then (True)
+        :Convert;
+        :trino_ddl +=;
+
+    elseif (SHOW PARTITIONS) then (True)
+        :Convert;
+        :trino_ddl +=;
+
+    elseif (DESCRIBE) then (True)
+        :Convert;
+        :trino_ddl +=;
+
+    elseif (len(columns) == 1) then (True)
+        :Convert;
+        :trino_ddl +=;
+
+    else (False)
+        :Error出力;
+        end
+
+    endif
+
+    :write output file(.sql);
+
+
+end
+@enduml
