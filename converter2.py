@@ -58,8 +58,6 @@ def hive_to_trino_ddl():
      
     # function, use, explain
     elif (len(columns) <= 1):
-        # hive_ddl = format_func_use_explain (hive_ddl)
-        # columns = re.findall(r'(\S+) +(\S+)', hive_ddl)
         if ("FUNCTION" in columns[0][1].upper()) or ("USE" in columns[0][0].upper()) or ("EXPLAIN" in columns[0][0].upper()):
             trino_ddl += columns[0][0] + " " + columns[0][1].rstrip(';') + ";\n"
 

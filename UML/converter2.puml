@@ -68,9 +68,14 @@ start
         :Convert;
         :trino_ddl +=;
 
-    elseif (len(columns) == 1) then (True)
-        :Convert;
-        :trino_ddl +=;
+    elseif (len(columns) <= 1) then (True)
+        if (FUNCTIONS or USE or EXPLAIN) then (True)
+            :Convert;
+            :trino_ddl +=;
+        else (False)
+            :Error出力;
+        end
+        endif
 
     else (False)
         :Error出力;
