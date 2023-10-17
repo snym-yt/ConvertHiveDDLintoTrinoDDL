@@ -20,7 +20,7 @@ start
             endwhile
 
         else (False)
-            if ("'IKE tablename'のフォーマットになっている")
+            if ("'LIKE tablename'のフォーマットになっている")
                 :trino_ddl += LIKE tablename;
             else (False)
                 :Error出力;
