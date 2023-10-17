@@ -20,7 +20,12 @@ start
             endwhile
 
         else (False)
-            :trino_ddl += LIKE tablename;
+            if ("'IKE tablename'のフォーマットになっている")
+                :trino_ddl += LIKE tablename;
+            else (False)
+                :Error出力;
+                end
+            endif
         endif
 
         :propertiesに()以降を格納;
