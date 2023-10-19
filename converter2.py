@@ -3,13 +3,12 @@ import sys
  
 # <Prerequisites>***************************************************************
 # (1) One semicolon per query.
-# (2) CREATE TABLE always includes "TBLPROPERTIES ('transactional'='false');".
-# (3) Don"t use for external table.
-# (4) "ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'" is not supported
-# (5) Structures, Array and Map data types are not supported.
+# (2) Don"t use for external table.
+# (3) "ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'" is not supported
+# (4) Structures, Array and Map data types are not supported.
 # ******************************************************************************
  
-input_path = "./hive_input/use.hql"
+input_path = "./hive_input/create.hql"
 filename = re.findall(r'input/(\S+).hql', input_path)
 output_path = "./trino_output/" + filename[0] + ".sql"
  
@@ -17,6 +16,12 @@ output_path = "./trino_output/" + filename[0] + ".sql"
 DATA_TYPE_LIST = ["TINYINT", "SMALLINT", "INT", "BIGINT", "BOOLEAN", "FLOAT", "DOUBLE", "STRING", "VARCHAR"]
  
 column_name_list = []
+
+PATTERN_CREATE = r'CREATE\s+TABLE\s+([^\s]+)\s+'
+PATTERN_LIKE = r'LIKE\s+([^\s]+)'
+PATTERN_PARTITION = r'PARTITIONED\s+BY\s+\('
+PATTERN_WITH = r'WITH\s+\('
+PATTERN_FORMAT = r'STORED\s+AS\s+(\S+)\s'
  
 def hive_to_trino_ddl():
  
@@ -26,119 +31,122 @@ def hive_to_trino_ddl():
  
     # adjust hive create format
     hive_ddl = format_create_hql(hive_ddl)
- 
-    # カラム名とデータ型のタプルをリストとして格納
-    columns = re.findall(r'(\S+) +(\S+)', hive_ddl)
 
-    if (columns == []):
-        hive_ddl = format_func_use_explain (hive_ddl)
-        columns = re.findall(r'(\S+) +(\S+)', hive_ddl)
- 
-    print(columns)
- 
-    trino_ddl = f""
- 
-    # DDL CREATE
-    if (columns[0][0].upper() == 'CREATE'):
-        trino_ddl = convert_create(hive_ddl, columns, trino_ddl)
- 
-    # SHOW TABLES IN itemx LIKE
-    elif (columns[0][0].upper() == 'SHOW') and (columns[0][1].upper() == 'TABLES'):
-        trino_ddl += "SHOW TABLES FROM " + columns[1][1] + " LIKE " + columns[2][1].rstrip(";").replace('*', '%') + ";\n"
-     
-    # SHOW PARTITIONS
-    elif (columns[0][0].upper() == 'SHOW') and (columns[0][1].upper() == 'PARTITIONS'):
-        db = re.findall(r'(\S+)[.]', hive_ddl)
-        table = re.findall(r'[.](\S+)', hive_ddl)
-        trino_ddl += "SELECT * FROM " + db[0] + '."' + table[0] + '$partitions"'
-     
-    # describe
-    elif (columns[0][0].upper() == 'DESC') or (columns[0][0].upper() == 'DESCRIBE'):
-        trino_ddl += "SHOW COLUMNS FROM " + columns[0][1].rstrip(';') + ";\n"
-     
-    # function, use, explain
-    elif (len(columns) <= 1):
-        if ("FUNCTION" in columns[0][1].upper()) or ("USE" in columns[0][0].upper()) or ("EXPLAIN" in columns[0][0].upper()):
-            trino_ddl += columns[0][0] + " " + columns[0][1].rstrip(';') + ";\n"
-
+    searches = None
+    searches = re.search(PATTERN_CREATE, hive_ddl, re.IGNORECASE)
+    # CREATE
+    if (searches != None):
+        table_name = re.findall(r'(\w{6})\s+(\w{5})\s+(\S+)\s', hive_ddl)[0][2]
+        trino_ddl = f"CREATE TABLE " + table_name + "(\n"
+        pattern = r'CREATE\s+TABLE\s+([^\s]+)\s+\('
+        searches = None
+        seraches = re.search(pattern, hive_ddl, re.IGNORECASE)
+        # LIKEがない
+        if (seraches != None):
+            trino_ddl = convert_create(hive_ddl, trino_ddl)
+        # LIKEあり(columnの指定がないためcolumn nameがLIKEになることがない)
         else:
-            sys.exit(f"Error: Used DDL is not supported or format is not appropriate.\n " + hive_ddl)
+            trino_ddl = convert_like(hive_ddl, trino_ddl)
+
+    # PARTITIONED
+    searches = None
+    searches = re.search(PATTERN_PARTITION, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        trino_ddl = convert_partitioned(hive_ddl, trino_ddl)
+
+    # STORED AS
+    searches = None
+    searches = re.search(PATTERN_FORMAT, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        trino_ddl = convert_dataformat(hive_ddl, trino_ddl)
  
-    else:
-        sys.exit(f"Error: Used DDL is not supported. " + columns[0][0])
+
+    trino_ddl += "\n);"
  
     with open(output_path, mode='w') as fout:
         fout.write(trino_ddl)
  
     return trino_ddl
  
- 
-def convert_create(hive_ddl, columns, trino_ddl):
+def convert_create(hive_ddl, trino_ddl):
  
     column_name_list = []
- 
-    # if read the last column or CREATE with LIKE, increment this flag
-    last_column_flag = 0
- 
-    # LIKEだとCREATE TABELの後に”("がないので分岐
-    if ("LIKE" in columns[1][0].upper()):
-        table_name = re.findall(r'(\w{6}) (\w{5}) (\S+)', hive_ddl)[0][2]
-        last_column_flag = 1
-    else:
-        table_name = columns[1][0]
- 
-    trino_ddl = f"CREATE TABLE " + table_name + "(\n"
+
+    pattern = r'CREATE\s+TABLE\s+([^\s]+)\s+\(([\s\S]+?)\)'
+    matches = re.finditer(pattern, hive_ddl, re.IGNORECASE)
+
+    # ()の中身を文字列で取得
+    for match in matches:
+        columns_string = match.group(2).replace("\n", "").replace(",", ", ")
+
+    # カラム名とデータ型をタプルで格納してリストを作成
+    columns = re.findall(r'(\S+) +(\S+)', columns_string)
  
     for column in columns:
+        if (column[0] not in column_name_list):
+            column_name_list.append(column[0])
+            trino_ddl += "  " + column[0] + " " + column[1] + "\n"
+        else:
+            sys.exit(f"Error: Duplicate column name. ({column[0]})")
  
-        # TBLPROPERTIES ('transactional'='false')
-        if ('TBLPROPERTIES' in column[0].upper()) and last_column_flag == 1:
-            trino_ddl += "  " + column[1].rstrip(';').lstrip('(').rstrip(')') + "\n"
+    return trino_ddl 
+
+def convert_like(hive_ddl, trino_ddl):
+    matches = None
+    matches = re.finditer(PATTERN_LIKE, hive_ddl, re.IGNORECASE)
+
+    if (matches == None):
+        sys.exit(f"Error: LIKE format is wrong.")
+
+    table_name = ""
+
+    # LIKEの参照先を取得
+    for match in matches:
+        table_name = match.group(1)
+    
+    print(table_name)
+    
+    trino_ddl += "  LIKE " + table_name
  
-        # CLUSTERED BY
-        elif ('CLUSTERED' in column[0].upper()) and last_column_flag == 1:
-            trino_ddl = convert_clustered(hive_ddl, trino_ddl)
- 
-        # SORTED BY
-        elif ('SORTED' in column[0].upper()) and last_column_flag == 1:
-            trino_ddl = convert_sorted(hive_ddl, trino_ddl)
- 
-        # INTO x BUSCKETS
-        elif ('INTO' in column[0].upper()) and last_column_flag == 1:
-            trino_ddl += "  " + "bucket_count = " + column[1] + ",\n"
- 
-        # ( xxx )
-        elif ('(' in column[0]):
-            # do nothing
-            trino_ddl += ''
- 
-        # PARTITIONED BY(dt string)
-        elif ('PARTITIONED' in column[0].upper()) and last_column_flag == 1:
-            trino_ddl += "  partitioned_by= ARRAY['dt'],\n"
-            trino_ddl = convert_partitioned(hive_ddl, trino_ddl)
- 
-         # partitioned by のdt用       
-        elif ('dt' in column[0]) and last_column_flag == 1:
-            # do nothing
-            trino_ddl += ''
- 
-        # LIKE db.source_table
-        elif ('LIKE' in column[0].upper()) and last_column_flag == 1:
-            trino_ddl += "  " + column[0] + " " + column[1] + "\n)\nWITH(\n"
- 
-        # STORED AS ORC
-        elif ('STORED' in column[0].upper()):
-            trino_ddl += "  format = 'ORC',\n"
-             
-        elif ('TABLE' not in column[1].upper()) and ('(' not in column[1]):
-            result_convert_column = convert_column(hive_ddl, trino_ddl, column, last_column_flag)
-            trino_ddl = result_convert_column[0]
-            last_column_flag = result_convert_column[1]
- 
-    trino_ddl += ");"
+    return trino_ddl 
+
+def convert_partitioned(hive_ddl, trino_ddl):
+    match = re.search(r'PARTITIONED\s+BY\s+\(\s*([^)]+)\s*\)', hive_ddl, re.IGNORECASE)
+    if match:
+        partitioned_by_value = match.group(1).strip()
+        if partitioned_by_value:
+            index = trino_ddl.find('\n)')
+            data_type = f"{partitioned_by_value}"
+            data_type = data_type.upper().replace('DT', 'dt').replace('STRING', 'VARCHAR')
+            trino_ddl = trino_ddl[:index] + ",\n  " + data_type + trino_ddl[index:]
+        else:
+            sys.exit("Error: string was not found.(PARTITIONED)")
+    else:
+        sys.exit("Error: PARTITIONED format was not suitable for this tool.")
+
+    match = re.search(PATTERN_WITH, hive_ddl, re.IGNORECASE)
+    # withがすでにある
+    if match:
+        trino_ddl += ",\n  partitioned_by = ARRAY['dt']"
+    # withがまだない
+    else:
+        trino_ddl += ")\nWITH(\n  partitioned_by = ARRAY['dt']"
  
     return trino_ddl
+
+def convert_dataformat(hive_ddl, trino_ddl):
+    matches = re.finditer(PATTERN_FORMAT, hive_ddl, re.IGNORECASE)
+    for match in matches:
+        data_format = match.group(1)
+    # withがすでにある
+    if match:
+        trino_ddl += f",\n  format = '{data_format}'"
+    # withがまだない
+    else:
+        trino_ddl += f")\nWITH(\n  format = '{data_format}'"
  
+    return trino_ddl
+
 def convert_clustered(hive_ddl, trino_ddl):
     match = re.search(r'CLUSTERED +BY +\(\s*([^)]+)\s*\)', hive_ddl, re.IGNORECASE)
     if match:
@@ -165,21 +173,6 @@ def convert_sorted(hive_ddl, trino_ddl):
  
     return trino_ddl
  
-def convert_partitioned(hive_ddl, trino_ddl):
-    match = re.search(r'PARTITIONED +BY +\(\s*([^)]+)\s*\)', hive_ddl, re.IGNORECASE)
-    if match:
-        partitioned_by_value = match.group(1).strip()
-        if partitioned_by_value:
-            index = trino_ddl.find('\n)')
-            data_type = f"{partitioned_by_value}"
-            data_type = data_type.upper().replace('DT', 'dt').replace('STRING', 'VARCHAR')
-            trino_ddl = trino_ddl[:index+1] + "  " + data_type + trino_ddl[index:]
-        else:
-            sys.exit("Error: string was not found.(PARTITIONED)")
-    else:
-        sys.exit("Error: PARTITIONED format was not suitable for this tool.")
- 
-    return trino_ddl
      
 def convert_column(hive_ddl, trino_ddl, column, last_column_flag):
     column_name = column[0]

@@ -4,7 +4,7 @@ start
     :定型に整形;
     if (CREATE TABLE句がある) then (True)
 
-        :trino_ddl += CREATE TABLE tablename();
+        :trino_ddl += CREATE TABLE tablename(;
         if ("CREATE TABLE"の後に空白文字のみ挟んで"("がある) then (True)
             :columsに()の中身を格納;
 
@@ -30,14 +30,26 @@ start
             endif
         endif
 
-        :propertiesに()以降を格納;
+        if (TABLE PROPERTIES) then (True)
+            if (WITHが既にある) then (True)
+                :trino_ddl += 
+                ,\n  partitioned_by = ARRAY['dt'];
+            else (False)
+                :trino_ddl += 
+                ")\nWITH(\n  partitioned_by = ARRAY['dt']";
+            endif
+        endif
+        if (DATA FORMAT) then (True)
+            if (WITHが既にある) then (True)
+                :trino_ddl += 
+                ",\n  format = 'xxx'";
+            else (False)
+                :trino_ddl += 
+                ")\nWITH(\n  format = 'xxx'";
+            endif
 
-        if (propertiesが空) then (True)
-            :trino_ddl += ;;
-
-        else (False)
-
-            :trino_ddl += with();;
+        endif
+            :trino_ddl += )with(;;
 
             while (property in properties)
 
@@ -59,7 +71,7 @@ start
                 endif
 
             endwhile
-        endif
+        
 
 
 
