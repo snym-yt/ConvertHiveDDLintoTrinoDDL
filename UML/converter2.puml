@@ -11,7 +11,8 @@ start
             while (column in columns)
 
                 if (typeが指定範囲内) then (True)
-                    :trino_ddl += column type; 
+                    :trino_ddl += 
+                    column type; 
                 else (False)
                     :Error出力;
                     end
@@ -21,7 +22,8 @@ start
 
         else (False)
             if ("'LIKE tablename'のフォーマットになっている")
-                :trino_ddl += LIKE tablename;
+                :trino_ddl += 
+                LIKE tablename;
             else (False)
                 :Error出力;
                 end
