@@ -33,12 +33,13 @@ start
         if (TABLE PROPERTIES) then (True)
             if (WITHが既にある) then (True)
                 :trino_ddl += 
-                ,\n  partitioned_by = ARRAY['dt'];
+                ",\n  partitioned_by = ARRAY['dt']";
             else (False)
                 :trino_ddl += 
                 ")\nWITH(\n  partitioned_by = ARRAY['dt']";
             endif
         endif
+
         if (DATA FORMAT) then (True)
             if (WITHが既にある) then (True)
                 :trino_ddl += 
@@ -49,28 +50,18 @@ start
             endif
 
         endif
-            :trino_ddl += )with(;;
 
-            while (property in properties)
+        if (CLUSTERED BY BUCKETING) then (True)
+            if (WITHが既にある) then (True)
+                :trino_ddl += 
+                ",\n  bucketed_by = ARRAY['xxx'],\n  bucket_count = xx";
+            else (False)
+                :trino_ddl += 
+                ")\nWITH(\n  bucketed_by = ARRAY['xxx'],\n  bucket_count = xx";
+            endif
 
-                if (TABLEPROPERTIES) then (True)
-                    :convert;
-                    :trino_ddl +=;
-                elseif (CLUSTERED) then (True)
-                    :convert;
-                    :trino_ddl +=;
-                elseif (SORTED) then (True)
-                    :convert;
-                    :trino_ddl +=;
-                elseif (PARTITIONED) then (True)
-                    :convert;
-                    :trino_ddl +=;
-                else (False)
-                    :Error出力;
-                    end
-                endif
+        endif
 
-            endwhile
         
 
 
