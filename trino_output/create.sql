@@ -5,5 +5,7 @@ CREATE TABLE tmp.table(
 )
 WITH(
   partitioned_by = ARRAY['dt'],
-  format = 'ORC'
+  format = 'ORC',
+  bucketed by = ARRAY['aaa'],
+  bucket_count = 24
 );

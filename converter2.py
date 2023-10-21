@@ -19,9 +19,11 @@ column_name_list = []
 
 PATTERN_CREATE = r'CREATE\s+TABLE\s+([^\s]+)\s+'
 PATTERN_LIKE = r'LIKE\s+([^\s]+)'
-PATTERN_PARTITION = r'PARTITIONED\s+BY\s+\('
+PATTERN_PARTITION = r'PARTITIONED\s+BY\s+\(\s*(\S+ +\S+)\s*\)'
 PATTERN_WITH = r'WITH\s+\('
 PATTERN_FORMAT = r'STORED\s+AS\s+(\S+)\s'
+PATTERN_CLUSTERED = r'CLUSTERED\s+BY\s+\(\s*(\S+)\s*\)'
+PATTERN_INTOBUCKETS = r'INTO\s+(\d+)\s+BUCKETS'
  
 def hive_to_trino_ddl():
  
@@ -32,9 +34,9 @@ def hive_to_trino_ddl():
     # adjust hive create format
     hive_ddl = format_create_hql(hive_ddl)
 
+    # CREATE
     searches = None
     searches = re.search(PATTERN_CREATE, hive_ddl, re.IGNORECASE)
-    # CREATE
     if (searches != None):
         table_name = re.findall(r'(\w{6})\s+(\w{5})\s+(\S+)\s', hive_ddl)[0][2]
         trino_ddl = f"CREATE TABLE " + table_name + "(\n"
@@ -59,6 +61,19 @@ def hive_to_trino_ddl():
     searches = re.search(PATTERN_FORMAT, hive_ddl, re.IGNORECASE)
     if (searches != None):
         trino_ddl = convert_dataformat(hive_ddl, trino_ddl)
+
+    # CLUSTERED 
+    searches = None
+    searches = re.search(PATTERN_CLUSTERED, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        trino_ddl = convert_clustered(hive_ddl, trino_ddl)
+
+    # INTO BUCKETS 
+    searches = None
+    searches = re.search(PATTERN_INTOBUCKETS, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        trino_ddl = convert_INTOBUCKETS(hive_ddl, trino_ddl)
+        print("INTO")
  
 
     trino_ddl += "\n);"
@@ -111,18 +126,15 @@ def convert_like(hive_ddl, trino_ddl):
     return trino_ddl 
 
 def convert_partitioned(hive_ddl, trino_ddl):
-    match = re.search(r'PARTITIONED\s+BY\s+\(\s*([^)]+)\s*\)', hive_ddl, re.IGNORECASE)
-    if match:
-        partitioned_by_value = match.group(1).strip()
-        if partitioned_by_value:
-            index = trino_ddl.find('\n)')
-            data_type = f"{partitioned_by_value}"
-            data_type = data_type.upper().replace('DT', 'dt').replace('STRING', 'VARCHAR')
-            trino_ddl = trino_ddl[:index] + ",\n  " + data_type + trino_ddl[index:]
-        else:
-            sys.exit("Error: string was not found.(PARTITIONED)")
+    match = re.search(PATTERN_PARTITION, hive_ddl, re.IGNORECASE)
+    partitioned_by_value = match.group(1).strip()
+    if partitioned_by_value:
+        index = trino_ddl.find('\n)')
+        data_type = f"{partitioned_by_value}"
+        data_type = data_type.upper().replace('DT', 'dt').replace('STRING', 'VARCHAR')
+        trino_ddl = trino_ddl[:index] + ",\n  " + data_type + trino_ddl[index:]
     else:
-        sys.exit("Error: PARTITIONED format was not suitable for this tool.")
+        sys.exit("Error: string was not found.(PARTITIONED)")
 
     match = re.search(PATTERN_WITH, hive_ddl, re.IGNORECASE)
     # withがすでにある
@@ -148,16 +160,22 @@ def convert_dataformat(hive_ddl, trino_ddl):
     return trino_ddl
 
 def convert_clustered(hive_ddl, trino_ddl):
-    match = re.search(r'CLUSTERED +BY +\(\s*([^)]+)\s*\)', hive_ddl, re.IGNORECASE)
+    match = re.search(PATTERN_CLUSTERED, hive_ddl, re.IGNORECASE)
+    clustered_by_value = match.group(1).strip()
+    # withがすでにある
     if match:
-        clustered_by_value = match.group(1).strip()
-        if clustered_by_value:
-            trino_ddl += f"  bucketed by = ARRAY['{clustered_by_value}'],\n"
-        else:
-            sys.exit("Error: dt string was not found.(CLUSTERED)")
+        trino_ddl += f",\n  bucketed by = ARRAY['{clustered_by_value}']"
+    # withがまだない
     else:
-        sys.exit("Error: CLUSTERED format was not suitable for this tool.")
+        trino_ddl += ")\nWITH(\n  bucketed by = ARRAY['{clustered_by_value}']"
  
+    return trino_ddl
+
+def convert_INTOBUCKETS(hive_ddl, trino_ddl):
+    match = re.search(PATTERN_INTOBUCKETS, hive_ddl, re.IGNORECASE)
+    bucket_count = match.group(1).strip()
+    trino_ddl += f",\n  bucket_count = {bucket_count}"
+
     return trino_ddl
  
 def convert_sorted(hive_ddl, trino_ddl):
@@ -172,7 +190,7 @@ def convert_sorted(hive_ddl, trino_ddl):
         sys.exit("Error: SORTED format was not suitable for this tool.")
  
     return trino_ddl
- 
+    
      
 def convert_column(hive_ddl, trino_ddl, column, last_column_flag):
     column_name = column[0]
