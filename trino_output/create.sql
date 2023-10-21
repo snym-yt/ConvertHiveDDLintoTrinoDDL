@@ -7,5 +7,6 @@ WITH(
   partitioned_by = ARRAY['dt'],
   format = 'ORC',
   bucketed by = ARRAY['aaa'],
-  bucket_count = 24
+  bucket_count = 24,
+  sorted by = ARRAY['xxx']
 );

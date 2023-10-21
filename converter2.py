@@ -24,6 +24,7 @@ PATTERN_WITH = r'WITH\s+\('
 PATTERN_FORMAT = r'STORED\s+AS\s+(\S+)\s'
 PATTERN_CLUSTERED = r'CLUSTERED\s+BY\s+\(\s*(\S+)\s*\)'
 PATTERN_INTOBUCKETS = r'INTO\s+(\d+)\s+BUCKETS'
+PATTERN_SORTED = r'SORTED\s+BY\s+\(\s*(\S+)\s*\)'
  
 def hive_to_trino_ddl():
  
@@ -73,7 +74,12 @@ def hive_to_trino_ddl():
     searches = re.search(PATTERN_INTOBUCKETS, hive_ddl, re.IGNORECASE)
     if (searches != None):
         trino_ddl = convert_INTOBUCKETS(hive_ddl, trino_ddl)
-        print("INTO")
+
+    # SORTED
+    searches = None
+    searches = re.search(PATTERN_SORTED, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        trino_ddl = convert_sorted(hive_ddl, trino_ddl)
  
 
     trino_ddl += "\n);"
@@ -167,7 +173,7 @@ def convert_clustered(hive_ddl, trino_ddl):
         trino_ddl += f",\n  bucketed by = ARRAY['{clustered_by_value}']"
     # withがまだない
     else:
-        trino_ddl += ")\nWITH(\n  bucketed by = ARRAY['{clustered_by_value}']"
+        trino_ddl += f")\nWITH(\n  bucketed by = ARRAY['{clustered_by_value}']"
  
     return trino_ddl
 
@@ -179,15 +185,14 @@ def convert_INTOBUCKETS(hive_ddl, trino_ddl):
     return trino_ddl
  
 def convert_sorted(hive_ddl, trino_ddl):
-    match = re.search(r'SORTED +BY +\(\s*([^)]+)\s*\)', hive_ddl, re.IGNORECASE)
+    match = re.search(PATTERN_SORTED, hive_ddl, re.IGNORECASE)
+    sorted_by_value = match.group(1).strip()
+    # withがすでにある
     if match:
-        sorted_by_value = match.group(1).strip()
-        if sorted_by_value:
-            trino_ddl += f"  sorted by = ARRAY['{sorted_by_value}'],\n"
-        else:
-            sys.exit("Error: string was not found.(SORTED)")
+        trino_ddl += f",\n  sorted by = ARRAY['{sorted_by_value}']"
+    # withがまだない
     else:
-        sys.exit("Error: SORTED format was not suitable for this tool.")
+        trino_ddl += f")\nWITH(\n  sorted by = ARRAY['{sorted_by_value}']"
  
     return trino_ddl
     
