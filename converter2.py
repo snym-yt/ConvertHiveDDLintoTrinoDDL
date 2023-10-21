@@ -8,7 +8,7 @@ import sys
 # (4) Structures, Array and Map data types are not supported.
 # ******************************************************************************
  
-input_path = "./hive_input/create.hql"
+input_path = "./hive_input/show_tables.hql"
 filename = re.findall(r'input/(\S+).hql', input_path)
 output_path = "./trino_output/" + filename[0] + ".sql"
  
@@ -18,6 +18,8 @@ DATA_TYPE_LIST = ["TINYINT", "SMALLINT", "INT", "BIGINT", "BOOLEAN", "FLOAT", "D
 column_name_list = []
 
 PATTERN_CREATE = r'CREATE\s+TABLE\s+([^\s]+)\s+'
+PATTERN_SHOWTABLES = r'SHOW\s+TABLES\s+IN\s+itemx\s+LIKE\s+([^\s]+)\s*;'
+PATTERN_SHOWPARTITIONS = r'SHOW\s+PARTITIONS\s+([^\s]+)\s*;'
 PATTERN_LIKE = r'LIKE\s+([^\s]+)'
 PATTERN_PARTITION = r'PARTITIONED\s+BY\s+\(\s*(\S+ +\S+)\s*\)'
 PATTERN_WITH = r'WITH\s+\('
@@ -26,10 +28,10 @@ PATTERN_CLUSTERED = r'CLUSTERED\s+BY\s+\(\s*(\S+)\s*\)'
 PATTERN_INTOBUCKETS = r'INTO\s+(\d+)\s+BUCKETS'
 PATTERN_SORTED = r'SORTED\s+BY\s+\(\s*(\S+)\s*\)'
 
-# create句があるときのみPROPERTYを見るためのフラグ
-create_flag = 0
  
 def hive_to_trino_ddl():
+
+    trino_ddl = ""
  
     # read file as string
     with open(input_path) as f:
@@ -39,10 +41,10 @@ def hive_to_trino_ddl():
     hive_ddl = format_create_hql(hive_ddl)
 
     # CREATE
-    searches = None
-    searches = re.search(PATTERN_CREATE, hive_ddl, re.IGNORECASE)
-    if (searches != None):
-        create_flag = 1
+    searches = determine_query(hive_ddl)
+    # print(searches)
+
+    if (searches == "CREATE"):
         table_name = re.findall(r'(\w{6})\s+(\w{5})\s+(\S+)\s', hive_ddl)[0][2]
         trino_ddl = f"CREATE TABLE " + table_name + "(\n"
         pattern = r'CREATE\s+TABLE\s+([^\s]+)\s+\('
@@ -55,8 +57,9 @@ def hive_to_trino_ddl():
         else:
             trino_ddl = convert_like(hive_ddl, trino_ddl)
 
-    if (create_flag == 1):
         trino_ddl = convert_properties(hive_ddl, trino_ddl)
+    elif (searches == "SHOW TABLES"):
+        print("show tables")
  
 
     trino_ddl += "\n);"
@@ -250,6 +253,17 @@ def convert_column(hive_ddl, trino_ddl, column, last_column_flag):
  
     return trino_ddl, last_column_flag
  
+def determine_query(hive_ddl):
+    searches = None
+    searches = re.search(PATTERN_CREATE, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        return "CREATE"
+    
+    searches = re.search(PATTERN_SHOWTABLES, hive_ddl, re.IGNORECASE)
+    if (searches != ""):
+        return "SHOW TABLES"
+
+
 # Adjust comma formatting
 def format_create_hql(hive_ddl):
     pattern = r'CREATE +TABLE +([^\s]+)\s+\(([\s\S]+?)\)\s*([\s\S]+?);'
