@@ -51,15 +51,20 @@ start
 
         endif
 
-        if (CLUSTERED BY BUCKETING) then (True)
+        if (CLUSTERED BY) then (True)
             if (WITHが既にある) then (True)
                 :trino_ddl += 
-                ",\n  bucketed_by = ARRAY['xxx'],\n  bucket_count = xx";
+                ",\n  bucketed_by = ARRAY['xxx']";
             else (False)
                 :trino_ddl += 
-                ")\nWITH(\n  bucketed_by = ARRAY['xxx'],\n  bucket_count = xx";
+                ")\nWITH(\n  bucketed_by = ARRAY['xxx']";
             endif
 
+        endif
+
+        if (INTO BUCKETS) then (True)
+            :trino_ddl += 
+            ",\n  bucket_count = xx";
         endif
 
         
