@@ -25,6 +25,9 @@ PATTERN_FORMAT = r'STORED\s+AS\s+(\S+)\s'
 PATTERN_CLUSTERED = r'CLUSTERED\s+BY\s+\(\s*(\S+)\s*\)'
 PATTERN_INTOBUCKETS = r'INTO\s+(\d+)\s+BUCKETS'
 PATTERN_SORTED = r'SORTED\s+BY\s+\(\s*(\S+)\s*\)'
+
+# create句があるときのみPROPERTYを見るためのフラグ
+create_flag = 0
  
 def hive_to_trino_ddl():
  
@@ -39,6 +42,7 @@ def hive_to_trino_ddl():
     searches = None
     searches = re.search(PATTERN_CREATE, hive_ddl, re.IGNORECASE)
     if (searches != None):
+        create_flag = 1
         table_name = re.findall(r'(\w{6})\s+(\w{5})\s+(\S+)\s', hive_ddl)[0][2]
         trino_ddl = f"CREATE TABLE " + table_name + "(\n"
         pattern = r'CREATE\s+TABLE\s+([^\s]+)\s+\('
@@ -51,6 +55,19 @@ def hive_to_trino_ddl():
         else:
             trino_ddl = convert_like(hive_ddl, trino_ddl)
 
+    if (create_flag == 1):
+        trino_ddl = convert_properties(hive_ddl, trino_ddl)
+ 
+
+    trino_ddl += "\n);"
+ 
+    with open(output_path, mode='w') as fout:
+        fout.write(trino_ddl)
+ 
+    return trino_ddl
+
+
+def convert_properties(hive_ddl, trino_ddl):
     # PARTITIONED
     searches = None
     searches = re.search(PATTERN_PARTITION, hive_ddl, re.IGNORECASE)
@@ -80,15 +97,9 @@ def hive_to_trino_ddl():
     searches = re.search(PATTERN_SORTED, hive_ddl, re.IGNORECASE)
     if (searches != None):
         trino_ddl = convert_sorted(hive_ddl, trino_ddl)
- 
 
-    trino_ddl += "\n);"
- 
-    with open(output_path, mode='w') as fout:
-        fout.write(trino_ddl)
- 
     return trino_ddl
- 
+
 def convert_create(hive_ddl, trino_ddl):
  
     column_name_list = []
@@ -101,7 +112,7 @@ def convert_create(hive_ddl, trino_ddl):
         columns_string = match.group(2).replace("\n", "").replace(",", ", ")
 
     # カラム名とデータ型をタプルで格納してリストを作成
-    columns = re.findall(r'(\S+) +(\S+)', columns_string)
+    columns = re.findall(r'(\S+)\s+(\S+)', columns_string)
  
     for column in columns:
         if (column[0] not in column_name_list):
@@ -195,7 +206,6 @@ def convert_sorted(hive_ddl, trino_ddl):
         trino_ddl += f")\nWITH(\n  sorted by = ARRAY['{sorted_by_value}']"
  
     return trino_ddl
-    
      
 def convert_column(hive_ddl, trino_ddl, column, last_column_flag):
     column_name = column[0]
