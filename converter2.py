@@ -8,7 +8,7 @@ import sys
 # (4) Structures, Array and Map data types are not supported.
 # ******************************************************************************
  
-input_path = "./hive_input/desc.hql"
+input_path = "./hive_input/use.hql"
 filename = re.findall(r'input/(\S+).hql', input_path)
 output_path = "./trino_output/" + filename[0] + ".sql"
  
@@ -21,6 +21,9 @@ PATTERN_CREATE = r'CREATE\s+TABLE\s+([^\s]+)\s+'
 PATTERN_SHOWTABLES = r'SHOW\s+TABLES\s+IN\s+itemx\s+LIKE\s+([^\s]+)\s*;'
 PATTERN_SHOWPARTITIONS = r'SHOW\s+PARTITIONS\s+([^\s]+)\s*;'
 PATTERN_DESC = r'DESC(RIBE)*\s+([^\s]+)\s*;'
+PATTERN_FUNCTION = r'SHOW\s+FUNCTIONS\s*;'
+PATTERN_USE = r'USE\s+([^\s]+)\s*;'
+PATTERN_EXPLAIN = r'EXPLAIN\s+([^\s]+)\s*;'
 PATTERN_LIKE = r'LIKE\s+([^\s]+)'
 PATTERN_PARTITION = r'PARTITIONED\s+BY\s+\(\s*(\S+ +\S+)\s*\)'
 PATTERN_WITH = r'WITH\s+\('
@@ -69,6 +72,18 @@ def hive_to_trino_ddl():
 
     elif (searches == "DESC"):
         trino_ddl = convert_desc(hive_ddl, trino_ddl)
+    
+    elif (searches == "FUNCTION"):
+        trino_ddl = convert_function(hive_ddl, trino_ddl)
+
+    elif (searches == "USE"):
+        trino_ddl = convert_use(hive_ddl, trino_ddl)
+
+    elif (searches == "EXPLAIN"):
+        trino_ddl = convert_explain(hive_ddl, trino_ddl)
+
+    else:
+        sys.exit(f"Error: Don't support this query.")
  
 
     trino_ddl += ";"
@@ -229,6 +244,22 @@ def convert_desc(hive_ddl, trino_ddl):
     trino_ddl += f"SHOW COLUMNS FROM catalog.{tablename}"
     return trino_ddl
 
+def convert_function(hive_ddl, trino_ddl):
+    trino_ddl += f"SHOW FUNCTIONS"
+    return trino_ddl
+
+def convert_use(hive_ddl, trino_ddl):
+    match = re.search(PATTERN_USE, hive_ddl, re.IGNORECASE)
+    db_name = match.group(1)
+    trino_ddl += f"USE {db_name}"
+    return trino_ddl
+
+def convert_explain(hive_ddl, trino_ddl):
+    match = re.search(PATTERN_EXPLAIN, hive_ddl, re.IGNORECASE)
+    query = match.group(1)
+    trino_ddl += f"EXPLAIN {query}"
+    return trino_ddl
+
 def determine_query(hive_ddl):
     searches = None
     searches = re.search(PATTERN_CREATE, hive_ddl, re.IGNORECASE)
@@ -246,6 +277,18 @@ def determine_query(hive_ddl):
     searches = re.search(PATTERN_DESC, hive_ddl, re.IGNORECASE)
     if (searches != None):
         return "DESC"
+    
+    searches = re.search(PATTERN_FUNCTION, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        return "FUNCTION"
+    
+    searches = re.search(PATTERN_USE, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        return "USE"
+    
+    searches = re.search(PATTERN_EXPLAIN, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        return "EXPLAIN"
 
 
 # Adjust comma formatting

@@ -83,14 +83,17 @@ start
         :trino_ddl +=
         "SHOW COLUMNS FROM catalog.{tablename}";
 
-    elseif (len(columns) <= 1) then (True)
-        if (FUNCTIONS or USE or EXPLAIN) then (True)
-            :Convert;
-            :trino_ddl +=;
-        else (False)
-            :Error出力;
-        end
-        endif
+    elseif (FUNCTION) then (True)
+        :trino_ddl +=
+        "SHOW FUNCTIONS";
+
+    elseif (USE) then (True)
+        :trino_ddl +=
+        "USE {db}";
+
+    elseif (EXPLAIN) then (True)
+        :trino_ddl +=
+        "EXPLAIN {query}";
 
     else (False)
         :Error出力;

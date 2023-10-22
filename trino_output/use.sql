@@ -1,1 +1,1 @@
-use db;
+USE db;
