@@ -129,19 +129,12 @@ def convert_create(hive_ddl, trino_ddl):
     return trino_ddl 
 
 def convert_like(hive_ddl, trino_ddl):
-    matches = None
-    matches = re.finditer(PATTERN_LIKE, hive_ddl, re.IGNORECASE)
-
-    if (matches == None):
-        sys.exit(f"Error: LIKE format is wrong.")
+    match = re.search(PATTERN_LIKE, hive_ddl, re.IGNORECASE)
 
     table_name = ""
 
     # LIKEの参照先を取得
-    for match in matches:
-        table_name = match.group(1)
-    
-    print(table_name)
+    table_name = match.group(1)
     
     trino_ddl += "  LIKE " + table_name
  
@@ -169,9 +162,8 @@ def convert_partitioned(hive_ddl, trino_ddl):
     return trino_ddl
 
 def convert_dataformat(hive_ddl, trino_ddl):
-    matches = re.finditer(PATTERN_FORMAT, hive_ddl, re.IGNORECASE)
-    for match in matches:
-        data_format = match.group(1)
+    match = re.search(PATTERN_FORMAT, hive_ddl, re.IGNORECASE)
+    data_format = match.group(1)
     # withがすでにある
     if match:
         trino_ddl += f",\n  format = '{data_format}'"
