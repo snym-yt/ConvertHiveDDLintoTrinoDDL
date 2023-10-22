@@ -1,0 +1,1 @@
+SELECT * FROM catalog.db."table$partitions";

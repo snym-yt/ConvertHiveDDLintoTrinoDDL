@@ -72,8 +72,8 @@ start
 
 
     elseif (SHOW TABLES) then (True)
-        :Convert;
-        :trino_ddl +=;
+        :trino_ddl +=
+        "SHOW TABLES FROM catalog.db LIKE '{tablename}'";
 
     elseif (SHOW PARTITIONS) then (True)
         :Convert;

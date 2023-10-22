@@ -1,1 +1,1 @@
-SHOW TABLES FROM catalog.db LIKE ''%_hist';
+SHOW TABLES FROM catalog.db LIKE '%_hist';

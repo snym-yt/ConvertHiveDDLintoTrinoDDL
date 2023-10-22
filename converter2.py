@@ -8,7 +8,7 @@ import sys
 # (4) Structures, Array and Map data types are not supported.
 # ******************************************************************************
  
-input_path = "./hive_input/create.hql"
+input_path = "./hive_input/show_tables.hql"
 filename = re.findall(r'input/(\S+).hql', input_path)
 output_path = "./trino_output/" + filename[0] + ".sql"
  
@@ -20,6 +20,7 @@ column_name_list = []
 PATTERN_CREATE = r'CREATE\s+TABLE\s+([^\s]+)\s+'
 PATTERN_SHOWTABLES = r'SHOW\s+TABLES\s+IN\s+itemx\s+LIKE\s+([^\s]+)\s*;'
 PATTERN_SHOWPARTITIONS = r'SHOW\s+PARTITIONS\s+([^\s]+)\s*;'
+PATTERN_DESC = r'DESC(RIBE)*\s+([^\s]+)\s*;'
 PATTERN_LIKE = r'LIKE\s+([^\s]+)'
 PATTERN_PARTITION = r'PARTITIONED\s+BY\s+\(\s*(\S+ +\S+)\s*\)'
 PATTERN_WITH = r'WITH\s+\('
@@ -62,6 +63,9 @@ def hive_to_trino_ddl():
 
     elif (searches == "SHOW TABLES"):
         trino_ddl = convert_showtables(hive_ddl, trino_ddl)
+
+    elif (searches == "SHOW PARTITIONS"):
+        trino_ddl = convert_showpartitions(hive_ddl, trino_ddl)
  
 
     trino_ddl += ";"
@@ -207,7 +211,13 @@ def convert_sorted(hive_ddl, trino_ddl):
 def convert_showtables(hive_ddl, trino_ddl):
     match = re.search(PATTERN_SHOWTABLES, hive_ddl, re.IGNORECASE)
     tablename = match.group(1).replace('*', '%')
-    trino_ddl += f"SHOW TABLES FROM catalog.db LIKE '{tablename}"
+    trino_ddl += f"SHOW TABLES FROM catalog.db LIKE {tablename}"
+    return trino_ddl
+
+def convert_showpartitions(hive_ddl, trino_ddl):
+    match = re.search(PATTERN_SHOWPARTITIONS, hive_ddl, re.IGNORECASE)
+    tablename = match.group(1).replace('.', '."')
+    trino_ddl += f"SELECT * FROM catalog.{tablename}$partitions\""
     return trino_ddl
 
 def determine_query(hive_ddl):
@@ -217,8 +227,12 @@ def determine_query(hive_ddl):
         return "CREATE"
     
     searches = re.search(PATTERN_SHOWTABLES, hive_ddl, re.IGNORECASE)
-    if (searches != ""):
+    if (searches != None):
         return "SHOW TABLES"
+
+    searches = re.search(PATTERN_SHOWPARTITIONS, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        return "SHOW PARTITIONS"
 
 
 # Adjust comma formatting
