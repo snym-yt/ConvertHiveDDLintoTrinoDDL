@@ -289,6 +289,8 @@ def determine_query(hive_ddl):
     searches = re.search(PATTERN_EXPLAIN, hive_ddl, re.IGNORECASE)
     if (searches != None):
         return "EXPLAIN"
+    
+    return "NOT SUPPORT"
 
 
 # Adjust comma formatting
