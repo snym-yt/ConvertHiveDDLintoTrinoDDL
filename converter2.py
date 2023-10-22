@@ -8,7 +8,7 @@ import sys
 # (4) Structures, Array and Map data types are not supported.
 # ******************************************************************************
  
-input_path = "./hive_input/show_tables.hql"
+input_path = "./hive_input/create.hql"
 filename = re.findall(r'input/(\S+).hql', input_path)
 output_path = "./trino_output/" + filename[0] + ".sql"
  
@@ -58,11 +58,13 @@ def hive_to_trino_ddl():
             trino_ddl = convert_like(hive_ddl, trino_ddl)
 
         trino_ddl = convert_properties(hive_ddl, trino_ddl)
+        trino_ddl += "\n)"
+
     elif (searches == "SHOW TABLES"):
-        print("show tables")
+        trino_ddl = convert_showtables(hive_ddl, trino_ddl)
  
 
-    trino_ddl += "\n);"
+    trino_ddl += ";"
  
     with open(output_path, mode='w') as fout:
         fout.write(trino_ddl)
@@ -210,49 +212,12 @@ def convert_sorted(hive_ddl, trino_ddl):
  
     return trino_ddl
      
-def convert_column(hive_ddl, trino_ddl, column, last_column_flag):
-    column_name = column[0]
-    if (column_name not in column_name_list):
-        column_name_list.append(column_name)
-    else:
-        sys.exit(f"Error: Duplicate column name. ({column_name})")
- 
-    data_type = column[1].upper().replace('STRING', 'VARCHAR')
- 
-    # last column
-    # 最後のカラムには","がなく、partitionedの"dt string"とも分ける
-    if (',' not in column[1]) and ('dt' not in column[0]) and (last_column_flag == 0):
-        match = re.search(r'partitioned', hive_ddl, flags=re.IGNORECASE)
-        # judge whether partitioned is included (yes -> need ",", no -> not need)
-        if match:
-            # judge whether data type is correct
-            if (data_type.upper() in DATA_TYPE_LIST):
-                trino_ddl += f"  {column_name} {data_type},\n" + ")\nWITH(\n"
-                last_column_flag = 1
-            else:
-                sys.exit(f"Error: Data type ({data_type}) is not supported by Hive. {column_name}")
-        else:
-            # judge whether data type is correct
-            if (data_type.upper() in DATA_TYPE_LIST):
-                trino_ddl += f"  {column_name} {data_type}\n" + ")\nWITH(\n"
-                last_column_flag = 1
-            else:
-                sys.exit(f"Error: Data type ({data_type}) is not supported by Hive. {column_name}")
-             
-    # column without last one
-    elif ('dt' not in column[0]) and (last_column_flag == 0):
-        # judge whether data type is correct
-        if (data_type.upper().rstrip(',') in DATA_TYPE_LIST):
-            trino_ddl += f"  {column_name} {data_type}\n"
-        else:
-            data_type = data_type.rstrip(",")
-            sys.exit(f"Error: Data type ({data_type}) is not supported by Hive")
-     
-    else:
-        sys.exit("Error: format or spel is wrong. " + column[0] + " " + column[1])
- 
-    return trino_ddl, last_column_flag
- 
+def convert_showtables(hive_ddl, trino_ddl):
+    match = re.search(PATTERN_SHOWTABLES, hive_ddl, re.IGNORECASE)
+    tablename = match.group(1).replace('*', '%')
+    trino_ddl += f"SHOW TABLES FROM catalog.db LIKE '{tablename}"
+    return trino_ddl
+
 def determine_query(hive_ddl):
     searches = None
     searches = re.search(PATTERN_CREATE, hive_ddl, re.IGNORECASE)
