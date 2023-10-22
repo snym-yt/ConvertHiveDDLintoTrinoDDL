@@ -8,7 +8,7 @@ import sys
 # (4) Structures, Array and Map data types are not supported.
 # ******************************************************************************
  
-input_path = "./hive_input/show_tables.hql"
+input_path = "./hive_input/desc.hql"
 filename = re.findall(r'input/(\S+).hql', input_path)
 output_path = "./trino_output/" + filename[0] + ".sql"
  
@@ -66,6 +66,9 @@ def hive_to_trino_ddl():
 
     elif (searches == "SHOW PARTITIONS"):
         trino_ddl = convert_showpartitions(hive_ddl, trino_ddl)
+
+    elif (searches == "DESC"):
+        trino_ddl = convert_desc(hive_ddl, trino_ddl)
  
 
     trino_ddl += ";"
@@ -220,6 +223,12 @@ def convert_showpartitions(hive_ddl, trino_ddl):
     trino_ddl += f"SELECT * FROM catalog.{tablename}$partitions\""
     return trino_ddl
 
+def convert_desc(hive_ddl, trino_ddl):
+    match = re.search(PATTERN_DESC, hive_ddl, re.IGNORECASE)
+    tablename = match.group(2)
+    trino_ddl += f"SHOW COLUMNS FROM catalog.{tablename}"
+    return trino_ddl
+
 def determine_query(hive_ddl):
     searches = None
     searches = re.search(PATTERN_CREATE, hive_ddl, re.IGNORECASE)
@@ -233,6 +242,10 @@ def determine_query(hive_ddl):
     searches = re.search(PATTERN_SHOWPARTITIONS, hive_ddl, re.IGNORECASE)
     if (searches != None):
         return "SHOW PARTITIONS"
+    
+    searches = re.search(PATTERN_DESC, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        return "DESC"
 
 
 # Adjust comma formatting
