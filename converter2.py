@@ -5,10 +5,11 @@ import sys
 # (1) One semicolon per query.
 # (2) Don"t use for external table.
 # (3) "ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'" is not supported
-# (4) Structures, Array and Map data types are not supported.
+# (4) LOCATION '/user/aaa/xxx'; is not supported
+# (5) Structures, Array and Map data types are not supported.
 # ******************************************************************************
  
-input_path = "./hive_input/use.hql"
+input_path = "./hive_input/create.hql"
 filename = re.findall(r'input/(\S+).hql', input_path)
 output_path = "./trino_output/" + filename[0] + ".sql"
  
@@ -26,11 +27,12 @@ PATTERN_USE = r'USE\s+([^\s]+)\s*;'
 PATTERN_EXPLAIN = r'EXPLAIN\s+([^\s]+)\s*;'
 PATTERN_LIKE = r'LIKE\s+([^\s]+)'
 PATTERN_PARTITION = r'PARTITIONED\s+BY\s+\(\s*(\S+ +\S+)\s*\)'
-PATTERN_WITH = r'WITH\s+\('
+PATTERN_WITH = r'WITH\s*\('
 PATTERN_FORMAT = r'STORED\s+AS\s+(\S+)\s'
 PATTERN_CLUSTERED = r'CLUSTERED\s+BY\s+\(\s*(\S+)\s*\)'
 PATTERN_INTOBUCKETS = r'INTO\s+(\d+)\s+BUCKETS'
 PATTERN_SORTED = r'SORTED\s+BY\s+\(\s*(\S+)\s*\)'
+PATTERN_TBLPROPERTIES = r'TBLPROPERTIES\s+\(\s*(\S+)\s*\)'
 
  
 def hive_to_trino_ddl():
@@ -44,20 +46,19 @@ def hive_to_trino_ddl():
     # adjust hive create format
     hive_ddl = format_create_hql(hive_ddl)
 
-    # CREATE
     searches = determine_query(hive_ddl)
-    # print(searches)
 
+    # CREATE
     if (searches == "CREATE"):
         table_name = re.findall(r'(\w{6})\s+(\w{5})\s+(\S+)\s', hive_ddl)[0][2]
         trino_ddl = f"CREATE TABLE " + table_name + "(\n"
         pattern = r'CREATE\s+TABLE\s+([^\s]+)\s+\('
         searches = None
         seraches = re.search(pattern, hive_ddl, re.IGNORECASE)
-        # LIKEがない
+        # No LIKE
         if (seraches != None):
             trino_ddl = convert_create(hive_ddl, trino_ddl)
-        # LIKEあり(columnの指定がないためcolumn nameがLIKEになることがない)
+        # LIKE (columnの指定がないためcolumn nameがLIKEになることがない)
         else:
             trino_ddl = convert_like(hive_ddl, trino_ddl)
 
@@ -125,6 +126,12 @@ def convert_properties(hive_ddl, trino_ddl):
     if (searches != None):
         trino_ddl = convert_sorted(hive_ddl, trino_ddl)
 
+    # TBLPROPERTIES
+    searches = None
+    searches = re.search(PATTERN_TBLPROPERTIES, hive_ddl, re.IGNORECASE)
+    if (searches != None):
+        trino_ddl = convert_tblproperties(hive_ddl, trino_ddl)
+
     return trino_ddl
 
 def convert_create(hive_ddl, trino_ddl):
@@ -144,7 +151,7 @@ def convert_create(hive_ddl, trino_ddl):
     for column in columns:
         if (column[0] not in column_name_list):
             column_name_list.append(column[0])
-            trino_ddl += "  " + column[0] + " " + column[1] + "\n"
+            trino_ddl += "  " + column[0] + " " + column[1].upper().replace('STRING', 'VARCHAR') + "\n"
         else:
             sys.exit(f"Error: Duplicate column name. ({column[0]})")
  
@@ -158,7 +165,7 @@ def convert_like(hive_ddl, trino_ddl):
     # LIKEの参照先を取得
     table_name = match.group(1)
     
-    trino_ddl += "  LIKE " + table_name
+    trino_ddl += "  LIKE " + table_name + "\n"
  
     return trino_ddl 
 
@@ -173,9 +180,9 @@ def convert_partitioned(hive_ddl, trino_ddl):
     else:
         sys.exit("Error: string was not found.(PARTITIONED)")
 
-    match = re.search(PATTERN_WITH, hive_ddl, re.IGNORECASE)
+    match_with = re.search(PATTERN_WITH, hive_ddl, re.IGNORECASE)
     # withがすでにある
-    if match:
+    if match_with:
         trino_ddl += ",\n  partitioned_by = ARRAY['dt']"
     # withがまだない
     else:
@@ -186,8 +193,10 @@ def convert_partitioned(hive_ddl, trino_ddl):
 def convert_dataformat(hive_ddl, trino_ddl):
     match = re.search(PATTERN_FORMAT, hive_ddl, re.IGNORECASE)
     data_format = match.group(1)
+
+    match_with = re.search(PATTERN_WITH, trino_ddl, re.IGNORECASE)
     # withがすでにある
-    if match:
+    if match_with:
         trino_ddl += f",\n  format = '{data_format}'"
     # withがまだない
     else:
@@ -198,8 +207,10 @@ def convert_dataformat(hive_ddl, trino_ddl):
 def convert_clustered(hive_ddl, trino_ddl):
     match = re.search(PATTERN_CLUSTERED, hive_ddl, re.IGNORECASE)
     clustered_by_value = match.group(1).strip()
+
+    match_with = re.search(PATTERN_WITH, trino_ddl, re.IGNORECASE)
     # withがすでにある
-    if match:
+    if match_with:
         trino_ddl += f",\n  bucketed by = ARRAY['{clustered_by_value}']"
     # withがまだない
     else:
@@ -217,12 +228,28 @@ def convert_INTOBUCKETS(hive_ddl, trino_ddl):
 def convert_sorted(hive_ddl, trino_ddl):
     match = re.search(PATTERN_SORTED, hive_ddl, re.IGNORECASE)
     sorted_by_value = match.group(1).strip()
+
+    match_with = re.search(PATTERN_WITH, trino_ddl, re.IGNORECASE)
     # withがすでにある
-    if match:
+    if match_with:
         trino_ddl += f",\n  sorted by = ARRAY['{sorted_by_value}']"
     # withがまだない
     else:
         trino_ddl += f")\nWITH(\n  sorted by = ARRAY['{sorted_by_value}']"
+ 
+    return trino_ddl
+
+def convert_tblproperties(hive_ddl, trino_ddl):
+    match = re.search(PATTERN_TBLPROPERTIES, hive_ddl, re.IGNORECASE)
+    property = match.group(1).strip()
+
+    match_with = re.search(PATTERN_WITH, trino_ddl, re.IGNORECASE)
+    # withがすでにある
+    if match_with:
+        trino_ddl += f",\n  {property}"
+    # withがまだない
+    else:
+        trino_ddl += f")\nWITH(\n  {property}"
  
     return trino_ddl
      
