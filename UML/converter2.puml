@@ -30,7 +30,7 @@ start
             endif
         endif
 
-        if (TABLE PROPERTIES) then (True)
+        if (PARTITIONED) then (True)
             if (WITHが既にある) then (True)
                 :trino_ddl += 
                 ",\n  partitioned_by = ARRAY['dt']";
@@ -65,6 +65,17 @@ start
         if (INTO BUCKETS) then (True)
             :trino_ddl += 
             ",\n  bucket_count = xx";
+        endif
+
+        if (TBLPROPERTIES) then (True)
+            if (WITHが既にある) then (True)
+                :trino_ddl += 
+                ",\n  {property}";
+            else (False)
+                :trino_ddl += 
+                ")\nWITH(\n  {property}";
+            endif
+
         endif
 
         
